@@ -1,0 +1,24 @@
+{
+  "name": "sandbox-escalation-fix",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "scripts/patch.js",
+    "backups/.gitkeep"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "prepare": "node scripts/patch.js apply",
+    "preuninstall": "node scripts/patch.js restore"
+  },
+  "engines": {
+    "node": ">=22.19 || >=24"
+  }
+}
