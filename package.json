@@ -1,5 +1,5 @@
 {
-  "name": "sandbox-escalation-fix",
+  "name": "dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix",
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
@@ -20,5 +20,7 @@
   },
   "engines": {
     "node": ">=22.19 || >=24"
-  }
+  },
+  "description": "修复 sandbox_permissions 和 justification 字段在 pwsh/bash/fs/dsh-sandbox 中的 no-op 升级报错。当会话已是 danger-full-access 模式时，模型携带空 justification 或重申同一模式被拒的问题。",
+  "license": "MIT"
 }
