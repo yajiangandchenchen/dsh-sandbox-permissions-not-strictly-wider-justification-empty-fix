@@ -22,7 +22,10 @@ Two-layer defense:
 
 ## How It Works
 
-- **Install** (`dsh plugin add`): The `prepare` script runs `patch.js apply`, which backs up original files and applies all modifications.
+- **Install** (`dsh plugin add`): The plugin is installed and Cordis injects the dynamic plugin line.
+- **First load**: The `apply()` function in `index.js` runs `patch.js apply`, which backs up original files and applies all modifications. This happens automatically on first plugin load.
+- **Auto-repair**: On every client start/restart, the plugin checks if patches are still valid. If patches are lost (e.g., after a desktop client update), it automatically re-applies them.
+- **Multi-target**: The plugin detects both DSH_HOME and desktop installation directories. If the hard link is broken (e.g., after a desktop update), it modifies both locations.
 - **Uninstall** (`dsh plugin remove`): The `preuninstall` script runs `patch.js restore`, which restores all original files from backups.
 
 ## Installation

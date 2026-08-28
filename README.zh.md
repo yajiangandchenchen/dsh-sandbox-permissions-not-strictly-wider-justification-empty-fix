@@ -22,7 +22,10 @@
 
 ## 工作原理
 
-- **安装**（`dsh plugin add`）：`prepare` 脚本运行 `patch.js apply`，备份原始文件并应用所有修改
+- **安装**（`dsh plugin add`）：插件安装到 profile 目录，Cordis 注入动态插件行
+- **首次加载**：`index.js` 的 `apply()` 函数运行 `patch.js apply`，备份原始文件并应用所有修改。此过程在首次加载时自动完成
+- **自动修复**：每次客户端启动/重启时，插件检查 patch 是否仍然有效。如果 patch 丢失（如桌面端更新后），自动重新应用
+- **多目标**：插件检测 DSH_HOME 和桌面端安装目录。如果硬链接已断开（如桌面端更新后），同时修改两端
 - **卸载**（`dsh plugin remove`）：`preuninstall` 脚本运行 `patch.js restore`，从备份恢复所有原始文件
 
 ## 安装

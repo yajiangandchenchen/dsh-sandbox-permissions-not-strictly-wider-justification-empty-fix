@@ -12,10 +12,12 @@
  *   node scripts/patch.js debug     # 诊断模式
  */
 
-import { readFile, writeFile, mkdir, access, constants, readdir, copyFile } from 'node:fs/promises';
+import { accessSync, constants, openSync, closeSync, writeSync, ftruncateSync, readdirSync } from 'node:fs';
+import { access as accessAsync, readFile as readFileAsync, writeFile as writeFileAsync, mkdir as mkdirAsync, copyFile as copyFileAsync, readdir as readdirAsync } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { execSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BACKUP_DIR = join(__dirname, '..', 'backups');
@@ -29,47 +31,151 @@ function getDshHome() {
   return join(process.env.USERPROFILE || '~', '.dsh');
 }
 
-async function findNodeModulesBase() {
-  const dshHome = getDshHome();
+/**
+ * 查找桌面端安装目录中的 @deepseek-ai 路径。
+ * 桌面端更新后会创建新文件、断开硬链接，因此需要同时修改两端。
+ */
+function findDesktopNodeModules() {
   const candidates = [
+    join(process.env.LOCALAPPDATA || '', 'Programs', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
+    join(process.env.ProgramFiles || '', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
+    join(process.env.LOCALAPPDATA || '', 'Programs', 'dsh-desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
+  ];
+  for (const p of candidates) {
+    try { accessSync(p, constants.R_OK | constants.W_OK); return p; } catch {}
+  }
+  return null;
+}
+
+/**
+ * 使用 fsutil 获取一个文件的所有硬链接路径。
+ * 如果硬链接已断开，返回的列表只包含自身。
+ */
+function getHardLinks(filePath) {
+  try {
+    const output = execSync(`fsutil hardlink list "${filePath}"`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    return output.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  } catch {
+    return [filePath];
+  }
+}
+
+/**
+ * 查找所有需要修改的目标路径。
+ * 包括 DSH_HOME 端和桌面端（如果存在且硬链接已断开）。
+ */
+function findAllTargets() {
+  const dshHome = getDshHome();
+  const targets = [];
+  
+  // DSH_HOME 端
+  const dshHomeBases = [
     join(dshHome, 'profiles', 'node_modules', '@deepseek-ai'),
     join(dshHome, 'node_modules', '@deepseek-ai'),
   ];
-  for (const p of candidates) {
-    try { await access(p, constants.R_OK | constants.W_OK); return p; } catch {}
+  
+  for (const base of dshHomeBases) {
+    try { accessSync(base, constants.R_OK | constants.W_OK); targets.push({ base, label: 'DSH_HOME' }); break; } catch {}
   }
-  const profilesDir = join(dshHome, 'profiles');
-  try {
-    const entries = await readdir(profilesDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const candidate = join(profilesDir, entry.name, 'node_modules', '@deepseek-ai');
-      try { await access(candidate, constants.R_OK | constants.W_OK); return candidate; } catch {}
+  
+  if (targets.length === 0) {
+    // 尝试遍历 profiles 目录
+    const profilesDir = join(dshHome, 'profiles');
+    try {
+      const entries = readdirSync(profilesDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const candidate = join(profilesDir, entry.name, 'node_modules', '@deepseek-ai');
+        try { accessSync(candidate, constants.R_OK | constants.W_OK); targets.push({ base: candidate, label: 'DSH_HOME' }); break; } catch {}
+      }
+    } catch { /* ignore */ }
+  }
+  
+  // 桌面端
+  const desktopBase = findDesktopNodeModules();
+  if (desktopBase) {
+    // 检查是否与 DSH_HOME 端是同一文件（硬链接是否仍然有效）
+    const dshBase = targets.length > 0 ? targets[0].base : null;
+    let isSameFile = false;
+    if (dshBase) {
+      const testFile = 'dsh-sandbox\\lib\\index.js';
+      const dshPath = join(dshBase, testFile);
+      const desktopPath = join(desktopBase, testFile);
+      const links = getHardLinks(dshPath);
+      isSameFile = links.some(l => l.toLowerCase() === desktopPath.toLowerCase());
     }
-  } catch {}
-  throw new Error(`无法定位 @deepseek-ai 目录。DSH_HOME=${dshHome}`);
+    
+    if (isSameFile) {
+      // 硬链接有效，只需修改一端
+      console.log('硬链接有效，只需修改 DSH_HOME 端');
+    } else {
+      // 硬链接已断开，需要同时修改两端
+      console.log('硬链接已断开，需要同时修改 DSH_HOME 和桌面端');
+      targets.push({ base: desktopBase, label: 'Desktop' });
+    }
+  }
+  
+  if (targets.length === 0) {
+    throw new Error('无法定位 @deepseek-ai 目录。');
+  }
+  
+  return targets;
+}
+
+async function findNodeModulesBase() {
+  const targets = findAllTargets();
+  return targets[0].base;
 }
 
 // ── 备份与恢复 ────────────────────────────────────────────────────────────────
 
-async function backupFile(srcPath) {
+function getBackupPath(srcPath) {
   const hash = createHash('sha256').update(srcPath).digest('hex').slice(0, 12);
   const backupName = `${hash}_${encodeURIComponent(srcPath)}`;
-  const backupPath = join(BACKUP_DIR, backupName);
-  await mkdir(BACKUP_DIR, { recursive: true });
-  try { await access(backupPath, constants.R_OK); return backupPath; } catch {}
+  return join(BACKUP_DIR, backupName);
+}
+
+async function backupFile(srcPath) {
+  const backupPath = getBackupPath(srcPath);
+  await mkdirAsync(BACKUP_DIR, { recursive: true });
+  // 如果备份已存在，直接返回（保证备份始终是原始版本）
+  try { await accessAsync(backupPath, constants.R_OK); return backupPath; } catch {}
+  // 如果文件已被修改（有 MARKER），说明这是二次运行，原始备份应已存在
+  // 但为了防止污染，检查文件内容
+  try {
+    const content = await readFileAsync(srcPath, 'utf-8');
+    if (content.includes(MARKER)) {
+      // 文件已被修改，不创建备份（避免污染）
+      // 但返回备份路径，让调用者知道跳过
+      return backupPath;
+    }
+  } catch {}
   // 直接备份用户当前的文件（修改之前的状态）
-  await copyFile(srcPath, backupPath);
+  await copyFileAsync(srcPath, backupPath);
   return backupPath;
 }
 
 async function restoreFile(srcPath) {
-  const hash = createHash('sha256').update(srcPath).digest('hex').slice(0, 12);
-  const backupName = `${hash}_${encodeURIComponent(srcPath)}`;
-  const backupPath = join(BACKUP_DIR, backupName);
-  try { await access(backupPath, constants.R_OK); } catch { return false; }
-  await copyFile(backupPath, srcPath);
+  const backupPath = getBackupPath(srcPath);
+  try { await accessAsync(backupPath, constants.R_OK); } catch { return false; }
+  await copyFileAsync(backupPath, srcPath);
   return true;
+}
+
+/**
+ * 原地修改文件内容，保持硬链接不被断开。
+ * 使用 r+ 模式打开文件（不截断），写入新内容后截断到目标长度。
+ * 这样修改不会创建新文件，硬链接得以保留。
+ */
+function writeFileInPlace(filePath, content) {
+  const fd = openSync(filePath, 'r+');
+  try {
+    const buffer = Buffer.from(content, 'utf-8');
+    writeSync(fd, buffer, 0, buffer.length, 0);
+    ftruncateSync(fd, buffer.length);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // ── 核心：行级匹配（忽略空白差异） ────────────────────────────────────────────
@@ -304,41 +410,57 @@ function applyOps(content, ops) {
 async function main() {
   const command = process.argv[2];
   if (!['apply', 'restore', 'status', 'debug', 'check'].includes(command)) {
-    console.error('用法: node scripts/patch.js <apply|restore|status|debug>');
+    console.error('用法: node scripts/patch.js <apply|restore|status|debug|check>');
     process.exit(1);
   }
 
-  const baseDir = await findNodeModulesBase();
-  console.log(`@deepseek-ai 目录: ${baseDir}`);
+  // 查找所有需要修改的目标（DSH_HOME + 桌面端）
+  const allTargets = findAllTargets();
+  console.log(`找到 ${allTargets.length} 个目标位置:`);
+  for (const tgt of allTargets) {
+    console.log(`  [${tgt.label}] ${tgt.base}`);
+  }
 
-  const targets = [
-    { path: join(baseDir, 'dsh-sandbox', 'lib', 'index.js'), getOps: getOpsForSandbox },
-    { path: join(baseDir, 'dsh-tool-pwsh', 'lib', 'index.js'), getOps: getOpsForPwsh },
-    { path: join(baseDir, 'dsh-tool-bash', 'lib', 'index.js'), getOps: getOpsForBash },
-    { path: join(baseDir, 'dsh-tool-fs', 'lib', 'index.js'), getOps: getOpsForFs },
+  // 构建文件目标列表
+  const fileNames = [
+    { name: 'dsh-sandbox', getOps: getOpsForSandbox },
+    { name: 'dsh-tool-pwsh', getOps: getOpsForPwsh },
+    { name: 'dsh-tool-bash', getOps: getOpsForBash },
+    { name: 'dsh-tool-fs', getOps: getOpsForFs },
   ];
+
+  // 展开为所有位置 × 所有文件
+  const targets = [];
+  for (const tgt of allTargets) {
+    for (const f of fileNames) {
+      targets.push({
+        path: join(tgt.base, f.name, 'lib', 'index.js'),
+        getOps: f.getOps,
+        label: tgt.label,
+        fileName: f.name,
+      });
+    }
+  }
 
   if (command === 'status') {
     for (const t of targets) {
-      const hash = createHash('sha256').update(t.path).digest('hex').slice(0, 12);
-      const backupName = `${hash}_${encodeURIComponent(t.path)}`;
-      const backupPath = join(BACKUP_DIR, backupName);
+      const backupPath = getBackupPath(t.path);
       let hasBackup = false;
-      try { await access(backupPath, constants.R_OK); hasBackup = true; } catch {}
+      try { await accessAsync(backupPath, constants.R_OK); hasBackup = true; } catch {}
       let exists = false;
-      try { await access(t.path, constants.R_OK); exists = true; } catch {}
-      const rel = t.path.split('@deepseek-ai\\')[1] || t.path;
+      try { await accessAsync(t.path, constants.R_OK); exists = true; } catch {}
+      const rel = `${t.label}\\${t.fileName}`;
       console.log(`${exists ? '✓' : '✗'} ${rel}  ${hasBackup ? '[有备份]' : '[无备份]'}`);
     }
     return;
   }
 
   if (command === 'check') {
-    // 检查四个文件是否都包含 MARKER
+    // 检查所有位置的所有文件是否都包含 MARKER
     let allPatched = true;
     for (const t of targets) {
       try {
-        await access(t.path, constants.R_OK);
+        await accessAsync(t.path, constants.R_OK);
         const content = await readFile(t.path, 'utf-8');
         if (!content.includes(MARKER)) allPatched = false;
       } catch {
@@ -352,7 +474,7 @@ async function main() {
   if (command === 'restore') {
     for (const t of targets) {
       const restored = await restoreFile(t.path);
-      const rel = t.path.split('@deepseek-ai\\')[1] || t.path;
+      const rel = `${t.label}\\${t.fileName}`;
       console.log(restored ? `✓ 已恢复: ${rel}` : `⚠ 无备份跳过: ${rel}`);
     }
     return;
@@ -360,9 +482,9 @@ async function main() {
 
   if (command === 'debug') {
     for (const t of targets) {
-      const rel = t.path.split('@deepseek-ai\\')[1] || t.path;
-      try { await access(t.path, constants.R_OK); } catch { console.log(`✗ 不存在: ${rel}`); continue; }
-      const content = await readFile(t.path, 'utf-8');
+      const rel = `${t.label}\\${t.fileName}`;
+      try { await accessAsync(t.path, constants.R_OK); } catch { console.log(`✗ 不存在: ${rel}`); continue; }
+      const content = await readFileAsync(t.path, 'utf-8');
       const lines = content.split('\n');
       const ops = t.getOps();
       console.log(`\n--- ${rel} ---`);
@@ -383,15 +505,16 @@ async function main() {
     return;
   }
 
-  // apply
+  // apply - 使用原地修改保持硬链接
   for (const t of targets) {
-    const rel = t.path.split('@deepseek-ai\\')[1] || t.path;
-    try { await access(t.path, constants.R_OK); } catch { console.log(`✗ 不存在: ${rel}`); continue; }
-    const original = await readFile(t.path, 'utf-8');
-    await backupFile(t.path, rel);
+    const rel = `${t.label}\\${t.fileName}`;
+    try { await accessAsync(t.path, constants.R_OK); } catch { console.log(`✗ 不存在: ${rel}`); continue; }
+    const original = await readFileAsync(t.path, 'utf-8');
+    await backupFile(t.path);
     const ops = t.getOps();
     const { result, log } = applyOps(original, ops);
-    await writeFile(t.path, result, 'utf-8');
+    // 使用原地修改（r+ 模式）保持硬链接不被断开
+    writeFileInPlace(t.path, result);
     console.log(`✓ 已修改: ${rel}`);
     for (const line of log) console.log(line);
   }

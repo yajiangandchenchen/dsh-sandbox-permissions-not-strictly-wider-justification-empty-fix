@@ -14,10 +14,7 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "scripts": {
-    "prepare": "node scripts/patch.js apply",
-    "preuninstall": "node scripts/patch.js restore"
-  },
+  "scripts": {},
   "engines": {
     "node": ">=22.19 || >=24"
   },
