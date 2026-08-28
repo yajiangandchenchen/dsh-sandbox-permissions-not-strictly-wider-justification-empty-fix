@@ -191,7 +191,9 @@ function tryRestoreHardLink(srcPath, targetPath) {
 async function restoreFile(srcPath) {
   const backupPath = getBackupPath(srcPath);
   try { await accessAsync(backupPath, constants.R_OK); } catch { return false; }
-  await copyFileAsync(backupPath, srcPath);
+  // 读取备份内容，用 writeFileInPlace 恢复，保持硬链接不被断开
+  const backupContent = await readFileAsync(backupPath, 'utf-8');
+  writeFileInPlace(srcPath, backupContent);
   return true;
 }
 
