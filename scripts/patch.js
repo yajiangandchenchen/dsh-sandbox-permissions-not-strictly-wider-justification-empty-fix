@@ -507,26 +507,29 @@ async function main() {
   }
 
   if (command === 'restore') {
+    // 检查硬链接是否完好
+    let hardLinkIntact = false;
+    if (allTargets.length > 1) {
+      const dshBase = allTargets[0].base;
+      const linkedBase = allTargets[1]?.base;
+      if (linkedBase) {
+        const testFile = join(dshBase, 'dsh-sandbox', 'lib', 'index.js');
+        hardLinkIntact = isSameFile(testFile, join(linkedBase, 'dsh-sandbox', 'lib', 'index.js'));
+      }
+    }
+    
+    if (hardLinkIntact) {
+      console.log('硬链接完好，只需恢复 DSH_HOME 端');
+    }
+    
     for (const t of targets) {
+      // 如果硬链接完好，跳过 Linked 端（与 DSH_HOME 是同一文件）
+      if (hardLinkIntact && t.label !== 'DSH_HOME') {
+        continue;
+      }
       const restored = await restoreFile(t.path);
       const rel = `${t.label}\\${t.fileName}`;
       console.log(restored ? `✓ 已恢复: ${rel}` : `⚠ 无备份跳过: ${rel}`);
-    }
-    // 恢复后尝试重建硬链接
-    if (allTargets.length > 1) {
-      const dshBase = allTargets[0].base;
-      const desktopBase = allTargets[1]?.base;
-      if (desktopBase) {
-        console.log('\n尝试重建硬链接...');
-        const fileNames = ['dsh-sandbox', 'dsh-tool-pwsh', 'dsh-tool-bash', 'dsh-tool-fs'];
-        for (const f of fileNames) {
-          const dshPath = join(dshBase, f, 'lib', 'index.js');
-          const desktopPath = join(desktopBase, f, 'lib', 'index.js');
-          if (tryRestoreHardLink(dshPath, desktopPath)) {
-            console.log(`  ✓ 已重建硬链接: ${f}`);
-          }
-        }
-      }
     }
     return;
   }
