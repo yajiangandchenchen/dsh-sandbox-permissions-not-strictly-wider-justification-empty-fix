@@ -20,8 +20,17 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const BACKUP_DIR = join(__dirname, '..', 'backups');
 const MARKER = '[sandbox-escalation-fix]';
+
+// 备份存放在持久化位置（插件目录外），这样卸载后仍能恢复
+function getBackupDir() {
+  const dshHome = process.env.DSH_HOME || (process.env.APPDATA 
+    ? join(process.env.APPDATA, 'dsh-desktop', 'harness') 
+    : join(process.env.USERPROFILE || '~', '.dsh'));
+  return join(dshHome, 'backups', 'sandbox-escalation-fix');
+}
+
+const BACKUP_DIR = getBackupDir();
 
 // ── 目标文件定位 ──────────────────────────────────────────────────────────────
 

@@ -95,4 +95,16 @@ export function apply(ctx) {
 
   // 延迟检查，等待文件系统就绪
   setTimeout(() => checkAndPatch().catch(() => {}), 1000);
+
+  // 注册卸载钩子：插件卸载时自动恢复原始文件
+  ctx.effect(() => {
+    return () => {
+      try {
+        const scriptPath = join(__dirname, 'scripts', 'patch.js');
+        execSync(`node ${scriptPath} restore`, { stdio: 'inherit' });
+      } catch (e) {
+        // 静默失败，避免影响卸载流程
+      }
+    };
+  });
 }
