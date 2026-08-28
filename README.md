@@ -31,14 +31,27 @@ Two-layer defense:
 ## Installation
 
 ```sh
-dsh plugin --profile <your-profile> add github:yajiangandchenchen/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
+dsh plugin --profile web add github:yajiangandchenchen/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
 ## Uninstallation
 
+**Step 1**: Restore original files from backups:
+
+```sh
+cd $DSH_HOME/profiles/web/node_modules/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
+node scripts/patch.js restore
+```
+
+This restores the four tool files (`dsh-sandbox`, `dsh-tool-pwsh`, `dsh-tool-bash`, `dsh-tool-fs`) to their original state using backups stored in `$DSH_HOME/backups/sandbox-escalation-fix/`.
+
+**Step 2**: Remove the plugin:
+
 ```sh
 dsh plugin --profile <your-profile> remove dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
+
+> **How backups work**: When the plugin first applies patches, it copies the original files to `DSH_HOME/backups/sandbox-escalation-fix/` (outside the plugin directory). These backups persist even after the plugin is removed, so you can always restore.
 
 ## What Gets Modified
 
