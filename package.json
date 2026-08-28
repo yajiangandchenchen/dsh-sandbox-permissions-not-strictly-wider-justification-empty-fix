@@ -1,6 +1,6 @@
 {
   "name": "dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "main": "index.js",
   "files": [
