@@ -150,18 +150,48 @@ async function backupFile(srcPath) {
   // 如果备份已存在，直接返回（保证备份始终是原始版本）
   try { await accessAsync(backupPath, constants.R_OK); return backupPath; } catch {}
   // 如果文件已被修改（有 MARKER），说明这是二次运行，原始备份应已存在
-  // 但为了防止污染，检查文件内容
   try {
     const content = await readFileAsync(srcPath, 'utf-8');
     if (content.includes(MARKER)) {
-      // 文件已被修改，不创建备份（避免污染）
-      // 但返回备份路径，让调用者知道跳过
       return backupPath;
     }
   } catch {}
   // 直接备份用户当前的文件（修改之前的状态）
   await copyFileAsync(srcPath, backupPath);
   return backupPath;
+}
+
+/**
+ * 检查两个文件是否是同一文件（硬链接）
+ */
+function isSameFile(path1, path2) {
+  try {
+    const links = getHardLinks(path1);
+    return links.some(l => l.toLowerCase() === path2.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 尝试恢复硬链接（如果源文件存在且内容相同）
+ */
+function tryRestoreHardLink(srcPath, targetPath) {
+  try {
+    // 检查源文件和目标文件是否内容相同
+    const srcContent = require('node:fs').readFileSync(srcPath, 'utf-8');
+    const targetContent = require('node:fs').readFileSync(targetPath, 'utf-8');
+    if (srcContent === targetContent) {
+      // 内容相同，可以尝试创建硬链接
+      try {
+        require('node:fs').linkSync(srcPath, targetPath);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  } catch {}
+  return false;
 }
 
 async function restoreFile(srcPath) {
@@ -485,6 +515,22 @@ async function main() {
       const restored = await restoreFile(t.path);
       const rel = `${t.label}\\${t.fileName}`;
       console.log(restored ? `✓ 已恢复: ${rel}` : `⚠ 无备份跳过: ${rel}`);
+    }
+    // 恢复后尝试重建硬链接
+    if (allTargets.length > 1) {
+      const dshBase = allTargets[0].base;
+      const desktopBase = allTargets[1]?.base;
+      if (desktopBase) {
+        console.log('\n尝试重建硬链接...');
+        const fileNames = ['dsh-sandbox', 'dsh-tool-pwsh', 'dsh-tool-bash', 'dsh-tool-fs'];
+        for (const f of fileNames) {
+          const dshPath = join(dshBase, f, 'lib', 'index.js');
+          const desktopPath = join(desktopBase, f, 'lib', 'index.js');
+          if (tryRestoreHardLink(dshPath, desktopPath)) {
+            console.log(`  ✓ 已重建硬链接: ${f}`);
+          }
+        }
+      }
     }
     return;
   }
