@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MARKER = '[sandbox-escalation-fix]';
+const MARKER = '[dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix]';
 
 export const name = 'dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix';
 
@@ -47,15 +47,25 @@ export function apply(ctx) {
       } catch {}
     }
     
-    // 桌面端
-    const desktopCandidates = [
-      join(process.env.LOCALAPPDATA || '', 'Programs', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
-      join(process.env.ProgramFiles || '', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
-    ];
-    
-    for (const p of desktopCandidates) {
-      try { await access(p, constants.R_OK); baseDirs.push(p); } catch {}
-    }
+    // 通过硬链接关系动态查找另一端
+    const testFile = join(baseDirs[0], 'dsh-sandbox', 'lib', 'index.js');
+    const { execSync } = require('node:child_process');
+    try {
+      const links = execSync(`fsutil hardlink list "${testFile}"`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      const linkList = links.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      for (const linkPath of linkList) {
+        const aiIndex = linkPath.indexOf('@deepseek-ai');
+        if (aiIndex > 0) {
+          const linkedBase = linkPath.substring(0, aiIndex + '@deepseek-ai'.length);
+          if (linkedBase !== baseDirs[0]) {
+            try { 
+              await access(linkedBase, constants.R_OK); 
+              baseDirs.push(linkedBase); 
+            } catch {}
+          }
+        }
+      }
+    } catch { /* 硬链接查询失败，忽略 */ }
     
     if (baseDirs.length === 0) {
       console.warn(`[${name}] 无法检查：无法定位 @deepseek-ai 目录`);

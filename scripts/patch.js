@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * sandbox-escalation-fix / scripts/patch.js
+ * dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix / scripts/patch.js
  * 
  * 修复 sandbox_permissions 和 justification 字段在 pwsh/bash/fs/dsh-sandbox 中的 bug。
  * 匹配策略：锚点定位 + 精确行替换（忽略空白差异）。
@@ -20,14 +20,14 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const MARKER = '[sandbox-escalation-fix]';
+const MARKER = '[dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix]';
 
 // 备份存放在持久化位置（插件目录外），这样卸载后仍能恢复
 function getBackupDir() {
   const dshHome = process.env.DSH_HOME || (process.env.APPDATA 
     ? join(process.env.APPDATA, 'dsh-desktop', 'harness') 
     : join(process.env.USERPROFILE || '~', '.dsh'));
-  return join(dshHome, 'backups', 'sandbox-escalation-fix');
+  return join(dshHome, 'backups', 'dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix');
 }
 
 const BACKUP_DIR = getBackupDir();

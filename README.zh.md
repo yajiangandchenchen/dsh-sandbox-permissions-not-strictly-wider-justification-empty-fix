@@ -1,4 +1,4 @@
-# sandbox-escalation-fix
+# dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 
 [English](README.md) | 中文
 
@@ -43,7 +43,7 @@ cd $env:DSH_HOME\profiles\web\node_modules\dsh-sandbox-permissions-not-strictly-
 node scripts/patch.js restore
 ```
 
-此命令使用存储在 `$env:DSH_HOME\backups\sandbox-escalation-fix\` 中的备份，将四个工具文件（`dsh-sandbox`、`dsh-tool-pwsh`、`dsh-tool-bash`、`dsh-tool-fs`）恢复到原始状态。
+此命令使用存储在 `$env:DSH_HOME\backups\dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix\` 中的备份，将四个工具文件（`dsh-sandbox`、`dsh-tool-pwsh`、`dsh-tool-bash`、`dsh-tool-fs`）恢复到原始状态。
 
 **步骤 2**：移除插件：
 
@@ -51,7 +51,7 @@ node scripts/patch.js restore
 dsh plugin --profile web remove dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
-> **备份机制说明**：插件首次应用 patch 时，会将原始文件复制到 `DSH_HOME\backups\sandbox-escalation-fix\`（插件目录之外）。即使插件被移除，备份仍然保留，因此随时可以恢复。
+> **备份机制说明**：插件首次应用 patch 时，会将原始文件复制到 `DSH_HOME\backups\dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix\`（插件目录之外）。即使插件被移除，备份仍然保留，因此随时可以恢复。
 
 ## 修改文件清单
 
