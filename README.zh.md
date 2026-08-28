@@ -30,8 +30,8 @@
 
 ## 安装
 
-```sh
-dsh plugin --profile web add github:yajiangandchenchen/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
+```powershell
+dsh plugin --profile web add dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix@latest
 ```
 
 ## 卸载
