@@ -41,22 +41,6 @@ function getDshHome() {
 }
 
 /**
- * 查找桌面端安装目录中的 @deepseek-ai 路径。
- * 桌面端更新后会创建新文件、断开硬链接，因此需要同时修改两端。
- */
-function findDesktopNodeModules() {
-  const candidates = [
-    join(process.env.LOCALAPPDATA || '', 'Programs', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
-    join(process.env.ProgramFiles || '', 'DSH Desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
-    join(process.env.LOCALAPPDATA || '', 'Programs', 'dsh-desktop', 'resources', 'app', 'node_modules', '@deepseek-ai'),
-  ];
-  for (const p of candidates) {
-    try { accessSync(p, constants.R_OK | constants.W_OK); return p; } catch {}
-  }
-  return null;
-}
-
-/**
  * 使用 fsutil 获取一个文件的所有硬链接路径。
  * 如果硬链接已断开，返回的列表只包含自身。
  */
@@ -70,58 +54,68 @@ function getHardLinks(filePath) {
 }
 
 /**
- * 查找所有需要修改的目标路径。
- * 包括 DSH_HOME 端和桌面端（如果存在且硬链接已断开）。
+ * 查找 DSH_HOME 的 node_modules 基础路径
  */
-function findAllTargets() {
+function findDshHomeBase() {
   const dshHome = getDshHome();
-  const targets = [];
-  
-  // DSH_HOME 端
-  const dshHomeBases = [
+  const candidates = [
     join(dshHome, 'profiles', 'node_modules', '@deepseek-ai'),
     join(dshHome, 'node_modules', '@deepseek-ai'),
   ];
   
-  for (const base of dshHomeBases) {
-    try { accessSync(base, constants.R_OK | constants.W_OK); targets.push({ base, label: 'DSH_HOME' }); break; } catch {}
+  for (const p of candidates) {
+    try { accessSync(p, constants.R_OK | constants.W_OK); return p; } catch {}
   }
   
-  if (targets.length === 0) {
-    // 尝试遍历 profiles 目录
-    const profilesDir = join(dshHome, 'profiles');
+  // 尝试遍历 profiles 目录
+  const profilesDir = join(dshHome, 'profiles');
+  try {
+    const entries = readdirSync(profilesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const candidate = join(profilesDir, entry.name, 'node_modules', '@deepseek-ai');
+      try { accessSync(candidate, constants.R_OK | constants.W_OK); return candidate; } catch {}
+    }
+  } catch { /* ignore */ }
+  
+  return null;
+}
+
+/**
+ * 通过硬链接关系查找所有需要修改的目标路径。
+ * 核心逻辑：DSH_HOME 的某些文件可能通过硬链接与其他位置共享。
+ * 通过 fsutil hardlink list 获取所有硬链接路径，动态确定修改目标。
+ */
+function findAllTargets() {
+  const dshBase = findDshHomeBase();
+  if (!dshBase) {
+    throw new Error('无法定位 @deepseek-ai 目录。');
+  }
+  
+  // 取一个测试文件来探测硬链接关系
+  const testFile = join(dshBase, 'dsh-sandbox', 'lib', 'index.js');
+  const allHardLinks = getHardLinks(testFile);
+  
+  // 收集所有硬链接路径（去重）
+  const targetSet = new Set();
+  targetSet.add(dshBase);
+  
+  for (const linkPath of allHardLinks) {
+    // 从硬链接路径反推 @deepseek-ai 基础目录
+    const aiIndex = linkPath.indexOf('@deepseek-ai');
+    if (aiIndex > 0) {
+      targetSet.add(linkPath.substring(0, aiIndex + '@deepseek-ai'.length));
+    }
+  }
+  
+  // 过滤掉不存在或不可写的路径
+  const targets = [];
+  for (const base of targetSet) {
     try {
-      const entries = readdirSync(profilesDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const candidate = join(profilesDir, entry.name, 'node_modules', '@deepseek-ai');
-        try { accessSync(candidate, constants.R_OK | constants.W_OK); targets.push({ base: candidate, label: 'DSH_HOME' }); break; } catch {}
-      }
-    } catch { /* ignore */ }
-  }
-  
-  // 桌面端
-  const desktopBase = findDesktopNodeModules();
-  if (desktopBase) {
-    // 检查是否与 DSH_HOME 端是同一文件（硬链接是否仍然有效）
-    const dshBase = targets.length > 0 ? targets[0].base : null;
-    let isSameFile = false;
-    if (dshBase) {
-      const testFile = 'dsh-sandbox\\lib\\index.js';
-      const dshPath = join(dshBase, testFile);
-      const desktopPath = join(desktopBase, testFile);
-      const links = getHardLinks(dshPath);
-      isSameFile = links.some(l => l.toLowerCase() === desktopPath.toLowerCase());
-    }
-    
-    if (isSameFile) {
-      // 硬链接有效，只需修改一端
-      console.log('硬链接有效，只需修改 DSH_HOME 端');
-    } else {
-      // 硬链接已断开，需要同时修改两端
-      console.log('硬链接已断开，需要同时修改 DSH_HOME 和桌面端');
-      targets.push({ base: desktopBase, label: 'Desktop' });
-    }
+      accessSync(base, constants.R_OK | constants.W_OK);
+      const isDshHome = base.startsWith(getDshHome());
+      targets.push({ base, label: isDshHome ? 'DSH_HOME' : 'Linked' });
+    } catch { /* 跳过不可访问的路径 */ }
   }
   
   if (targets.length === 0) {
