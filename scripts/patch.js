@@ -303,7 +303,7 @@ function applyOps(content, ops) {
 
 async function main() {
   const command = process.argv[2];
-  if (!['apply', 'restore', 'status', 'debug'].includes(command)) {
+  if (!['apply', 'restore', 'status', 'debug', 'check'].includes(command)) {
     console.error('用法: node scripts/patch.js <apply|restore|status|debug>');
     process.exit(1);
   }
@@ -330,6 +330,22 @@ async function main() {
       const rel = t.path.split('@deepseek-ai\\')[1] || t.path;
       console.log(`${exists ? '✓' : '✗'} ${rel}  ${hasBackup ? '[有备份]' : '[无备份]'}`);
     }
+    return;
+  }
+
+  if (command === 'check') {
+    // 检查四个文件是否都包含 MARKER
+    let allPatched = true;
+    for (const t of targets) {
+      try {
+        await access(t.path, constants.R_OK);
+        const content = await readFile(t.path, 'utf-8');
+        if (!content.includes(MARKER)) allPatched = false;
+      } catch {
+        allPatched = false;
+      }
+    }
+    console.log(allPatched ? 'PATCHED' : 'NEED_PATCH');
     return;
   }
 

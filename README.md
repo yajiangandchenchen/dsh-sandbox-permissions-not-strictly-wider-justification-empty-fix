@@ -11,7 +11,7 @@ When a session is already at `danger-full-access` mode, two errors can occur:
 1. **Empty justification**: The model sends `justification: ""` (empty string), which triggers `validateEscalationArgs` to throw `invalid justification: expected a non-empty sentence`.
 2. **No-op escalation**: The model sends `sandbox_permissions: "danger-full-access"` (same as current mode), which triggers `approveEscalation` to throw `sandbox escalation to "X" is not strictly wider`.
 
-This is the 4th independent report (GitHub #3519 → #4359 → #4383 → #4412) and affects all sessions using non-default models.
+This is the 4th independent report ([GitHub #3519](https://github.com/deepseek-ai/deepseek-harness/discussions/3519) → [#4359](https://github.com/deepseek-ai/deepseek-harness/discussions/4359) → [#4383](https://github.com/deepseek-ai/deepseek-harness/discussions/4383) → [#4412](https://github.com/deepseek-ai/deepseek-harness/discussions/4412)) and affects all sessions using non-default models.
 
 ## The Fix
 
@@ -28,13 +28,13 @@ Two-layer defense:
 ## Installation
 
 ```sh
-dsh plugin --profile <your-profile> add github:your-username/sandbox-escalation-fix
+dsh plugin --profile <your-profile> add github:yajiangandchenchen/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
 ## Uninstallation
 
 ```sh
-dsh plugin --profile <your-profile> remove sandbox-escalation-fix
+dsh plugin --profile <your-profile> remove dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
 ## What Gets Modified

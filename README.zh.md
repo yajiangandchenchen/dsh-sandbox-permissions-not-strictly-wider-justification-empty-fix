@@ -11,7 +11,7 @@
 1. **空 justification**：模型发送 `justification: ""`（空字符串），触发 `validateEscalationArgs` 抛出 `invalid justification: expected a non-empty sentence`
 2. **no-op 升级**：模型发送 `sandbox_permissions: "danger-full-access"`（与当前模式相同），触发 `approveEscalation` 抛出 `sandbox escalation to "X" is not strictly wider`
 
-这是第 4 次独立报告（GitHub #3519 → #4359 → #4383 → #4412），影响所有使用非默认模型的会话。
+这是第 4 次独立报告（[GitHub #3519](https://github.com/deepseek-ai/deepseek-harness/discussions/3519) → [#4359](https://github.com/deepseek-ai/deepseek-harness/discussions/4359) → [#4383](https://github.com/deepseek-ai/deepseek-harness/discussions/4383) → [#4412](https://github.com/deepseek-ai/deepseek-harness/discussions/4412)），影响所有使用非默认模型的会话。
 
 ## 修复方案
 
@@ -28,13 +28,13 @@
 ## 安装
 
 ```sh
-dsh plugin --profile <your-profile> add github:your-username/sandbox-escalation-fix
+dsh plugin --profile <your-profile> add github:yajiangandchenchen/dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
 ## 卸载
 
 ```sh
-dsh plugin --profile <your-profile> remove sandbox-escalation-fix
+dsh plugin --profile <your-profile> remove dsh-sandbox-permissions-not-strictly-wider-justification-empty-fix
 ```
 
 ## 修改文件清单
