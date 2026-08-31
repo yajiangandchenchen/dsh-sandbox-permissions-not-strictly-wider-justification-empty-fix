@@ -103,8 +103,10 @@ export function apply(ctx) {
     }
   };
 
-  // 延迟检查，等待文件系统就绪
-  setTimeout(() => checkAndPatch().catch(() => {}), 1000);
+  // 使用 Cordis 'ready' 钩子，确保所有服务就绪后检查
+  ctx.on('ready', () => {
+    checkAndPatch().catch(() => {});
+  });
 
   // 注册卸载钩子：插件卸载时自动恢复原始文件
   ctx.effect(() => {
