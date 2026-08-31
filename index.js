@@ -103,10 +103,8 @@ export function apply(ctx) {
     }
   };
 
-  // 使用 Cordis 'ready' 钩子，确保所有服务就绪后检查
-  ctx.on('ready', () => {
-    checkAndPatch().catch(() => {});
-  });
+  // 直接执行检查（Cordis 保证 apply 时服务已就绪）
+  checkAndPatch().catch(() => {});
 
   // 注册卸载钩子：插件卸载时自动恢复原始文件
   ctx.effect(() => {
