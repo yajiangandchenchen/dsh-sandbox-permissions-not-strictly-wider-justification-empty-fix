@@ -104,7 +104,13 @@ export function apply(ctx) {
   };
 
   // 直接执行检查（Cordis 保证 apply 时服务已就绪）
-  checkAndPatch().catch(() => {});
+  console.log(`[${name}] 插件加载，开始检查 patch 状态...`);
+  checkAndPatch().then(() => {
+    console.log(`[${name}] 检查完成`);
+  }).catch((e) => {
+    console.error(`[${name}] 检查失败: ${e.message}`);
+    console.error(e.stack);
+  });
 
   // 注册卸载钩子：插件卸载时自动恢复原始文件
   ctx.effect(() => {
